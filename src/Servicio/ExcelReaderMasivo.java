@@ -16,10 +16,13 @@ public class ExcelReaderMasivo {
         try (FileInputStream fi = new FileInputStream(new File(ruta)); Workbook wb = new XSSFWorkbook(fi)) {
             Sheet s = wb.getSheet("FAC_BOL");
 
-            for (int fila = 1; fila <= s.getLastRowNum(); fila++) {
+            for (int fila = 2; fila <= s.getLastRowNum(); fila++) {
                 Row f = s.getRow(fila);
-                if (f == null)continue;
-                String fechaEmision = getFecha(f.getCell(3));/////
+                if (f == null) {
+                    continue;
+                }
+                String fechaEmision = getFecha(f.getCell(3));
+                /////
                 String tipoDocumento = getString(f, 0);
                 String serie = getString(f, 1);
                 String correlativo = getString(f, 2);
@@ -27,47 +30,60 @@ public class ExcelReaderMasivo {
                 int rutRecept = getInt(f, 5);
                 String rznSocRecep = getString(f, 6);
                 String dirRecep = getString(f, 7);
-                int tipoOperacion = getInt(f, 8);
-                String tipoMoneda = getString(f, 9);
-                double MntTotGrat = getDouble(f, 10);
-                double MntNeto = getDouble(f, 11);
-                int montoImpuesto = getInt(f, 13);
+                String tipoOperacion = getString(f, 8);
+                String tipoMoneda = getString(f, 9); // MONEDA
+                double MntTotGrat = getDouble(f, 10); // TOT GRATUITO
+                double MntNeto = getDouble(f, 11); // TOT GRAVADA
+                int montoImpuesto = getInt(f, 13); // IGV
                 double MntTotal = getDouble(f, 14);
-                String formaPago = getString(f, 15);
+                String formaPago = getString(f, 33);
                 String fechaVencimiento = "";
                 if (formaPago.equalsIgnoreCase("credito")) {
                     fechaVencimiento = LocalDate.parse(fechaEmision).plusDays(30).toString();
                 }
-                if (formaPago.isEmpty()==true)formaPago="Contado";
-                double montoNetoPendPago = getDouble(f, 16);
-                int cod_detrac = getInt(f, 20);
-                int porcentaje_detrac = getInt(f, 21);
-                double monto_detrac = getDouble(f, 22);
-                String valor_detrac = getString(f, 23);
-                
+                //if (formaPago.isEmpty() == true) {
+                    //formaPago = "Contado";
+                //}
+                String cuota = getString(f, 34);
+                String montoNetoPendPago = getString(f, 35);
+                String fechaCuota = getString(f, 36);
+                int cod_detrac = getInt(f, 18);
+                int porcentaje_detrac = getInt(f, 19);
+                double monto_detrac = getDouble(f, 20);
+                String valor_detrac = getString(f, 21); // Cuenta bancaria
+                String tipoNotaCredito = getString(f, 22); // TIPO_NC_ND
+                String sustento = getString(f, 23); // MOTIVO_NC
+                String TpoDocRef = getString(f, 24);
+                String SerieRef = getString(f, 25);
+                int FolioRef = getInt(f, 26); // CORRELATIVO REF
+
                 List<Producto> items = new ArrayList<>();
-                int colItemBase = 39;
+                int colItemBase = 37;
                 for (int i = 0; i < 10; i++) {
-                    int colItem= colItemBase + (i * 13);
+                    int colItem = colItemBase + (i * 13);
                     int cantidad = getInt(f, colItem);
                     String codigo = getString(f, colItem + 1);
                     String nombre = getString(f, colItem + 2);
-                    double precio_item  = getDouble(f, colItem + 4);
+                    int cod_sunat = getInt(f, colItem+3);
+                    double precio_item = getDouble(f, colItem + 4);
                     double precio_item_sin_igv = getDouble(f, colItem + 5);
                     double indExe = getDouble(f, colItem + 6);
                     double igv = getDouble(f, colItem + 7);
                     double monto_item = getDouble(f, colItem + 8);
-                    
-                    if (codigo != null && !codigo.isBlank()) {
+                    double descuentoItem = getDouble(f, colItem +9);
+                    String cod_desc_item = getString(f, colItem+10);
+                    if(!nombre.isEmpty()&& !nombre.isBlank()){
                         items.add(new Producto(cantidad, codigo, nombre, precio_item, precio_item_sin_igv,
-                            indExe, igv, monto_item));
+                                indExe, igv, monto_item, cod_sunat,descuentoItem,cod_desc_item));
                     }
                 }
                 Boleta b = new Boleta(tipoDocumento, serie, correlativo, tipoOperacion, tipoMoneda,
                         tipoRutReceptor, rutRecept, rznSocRecep, dirRecep, formaPago,
                         montoNetoPendPago, MntTotGrat, MntNeto, MntTotal,
                         montoImpuesto, items, cod_detrac, porcentaje_detrac, monto_detrac, valor_detrac,
-                fechaEmision,fechaVencimiento);
+                        fechaEmision, fechaVencimiento, tipoNotaCredito, sustento, 
+                        TpoDocRef,SerieRef,FolioRef, cuota, fechaCuota);
+
                 cola.add(b);
             }
         } catch (IOException e) {
@@ -81,8 +97,21 @@ public class ExcelReaderMasivo {
         if (c == null) {
             return "";
         }
-        c.setCellType(CellType.STRING);
-        return c.getStringCellValue().trim();
+        switch (c.getCellType()) {
+        case STRING:
+            return c.getStringCellValue().trim();
+        case NUMERIC:
+            // Si es número, lo convertimos a String sin perder valor
+            return String.valueOf(c.getNumericCellValue());
+        case FORMULA:
+            try {
+                return c.getStringCellValue().trim();
+            } catch (IllegalStateException e) {
+                return String.valueOf(c.getNumericCellValue());
+            }
+        default:
+            return "";
+        }
     }
 
     private static int getInt(Row r, int col) {
@@ -106,7 +135,7 @@ public class ExcelReaderMasivo {
         }
         return c.getNumericCellValue();
     }
-    
+
     private static String getFecha(Cell cell) {
         if (cell == null) {
             return "";
@@ -120,6 +149,5 @@ public class ExcelReaderMasivo {
         // Si ya viene como texto
         return cell.toString().trim();
     }
-
 
 }
